@@ -6,6 +6,7 @@ docs/json/**/*
 vendor/
 .idea/
 *.iml
+.vscode/
 
 # DocFX
 **/out/*
