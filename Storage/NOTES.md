@@ -53,6 +53,13 @@ $acl = $bucket->acl();
 $aclList = $acl->get($options);
 ```
 
+This passes, but needs this line in `$options`:
+```
+$options['entity'] = 'allAuthenticatedUsers';
+```
+
+> I got to know this by reading the definition of `Acl::get()` method, if this option is present, only then `$this->connection->getAcl()` is called.
+
 ---
 
 ## storage.bucket_acl.list [success]
@@ -178,6 +185,11 @@ Headers not passed
 $acl = $bucket->defaultAcl();
 $aclList = $acl->get($options);
 ```
+
+This passes, but needs this line in `$options`:
+```
+$options['entity'] = 'allAuthenticatedUsers';
+```
 ---
 
 ## storage.default_object_acl.list [success]
@@ -231,7 +243,13 @@ Headers not passed
 ```php
 $storage->hmacKeys($options);
 ```
-
+Only calling `hmacKeys()` never calls the API. The API is called once we loop the keys. It's like lazy loading.
+```
+$keys = $storage->hmacKeys($options);
+foreach($keys as $key){
+    echo $key->accessId() . "\n";
+}
+```
 ---
 
 ## storage.hmacKey.update [success]
@@ -292,6 +310,13 @@ Headers not passed
 ```php
 $bucket->notifications($options);
 ```
+
+Just like before only calling `notifications()` never calls the API. The API is called once we loop the objects.
+```
+$objs = $bucket->notifications($options);
+foreach($objs as $obj){
+}
+```
 ---
 
 ## storage.notifications.insert [success]
@@ -345,6 +370,7 @@ Headers not passed
 ```php
 $bucket->objects()
 ```
+Just like before, this needs a loop and it passes.
 
 ---
 
@@ -628,7 +654,10 @@ Headers not passed
 $acl = $object->acl();
 $aclList = $acl->get($options);
 ```
-
+Just like before this passes, but needs this line in `$options`:
+```
+$options['entity'] = 'allAuthenticatedUsers';
+```
 ---
 
 ## storage.object_acl.list [success]
