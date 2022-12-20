@@ -6,6 +6,8 @@ docs/json/**/*
 vendor/
 .idea/
 *.iml
+.vscode/
+.phpunit.result.cache
 
 # DocFX
 **/out/*

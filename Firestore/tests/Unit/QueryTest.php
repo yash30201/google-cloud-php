@@ -32,6 +32,7 @@ use Google\Cloud\Firestore\V1\StructuredQuery\CompositeFilter\Operator;
 use Google\Cloud\Firestore\V1\StructuredQuery\Direction;
 use Google\Cloud\Firestore\V1\StructuredQuery\FieldFilter\Operator as FieldFilterOperator;
 use Google\Cloud\Firestore\ValueMapper;
+use Google\Protobuf\Timestamp as ProtobufTimestamp;
 use Yoast\PHPUnitPolyfills\TestCases\TestCase;
 use Prophecy\Argument;
 use Yoast\PHPUnitPolyfills\Polyfills\ExpectException;
@@ -44,10 +45,10 @@ class QueryTest extends TestCase
 {
     use ExpectException;
 
-    const PROJECT = 'example_project';
-    const DATABASE = '(default)';
-    const QUERY_PARENT = 'projects/example_project/databases/(default)/documents';
-    const COLLECTION = 'foo';
+    public const PROJECT = 'example_project';
+    public const DATABASE = '(default)';
+    public const QUERY_PARENT = 'projects/example_project/databases/(default)/documents';
+    public const COLLECTION = 'foo';
 
     private $queryObj = [
         'from' => [
@@ -106,7 +107,7 @@ class QueryTest extends TestCase
                             ]
                         ]
                     ],
-                    'readTime' => (new \DateTime)->format(Timestamp::FORMAT)
+                    'readTime' => (new \DateTime())->format(Timestamp::FORMAT)
                 ],
                 []
             ]));
@@ -122,11 +123,50 @@ class QueryTest extends TestCase
         $this->assertEquals('world', $current['hello']);
     }
 
+    public function testReadTimeWithDocuments()
+    {
+        $name = self::QUERY_PARENT .'/foo';
+        $readTime = new ProtobufTimestamp();
+        $readTime->setSeconds(time() - 60);
+
+        $this->connection->runQuery(Argument::withEntry('readTime', $readTime))
+            ->shouldBeCalled()
+            ->willReturn(new \ArrayIterator([
+                [
+                    'document' => [
+                        'name' => $name,
+                        'fields' => [
+                            'hello' => [
+                                'stringValue' => 'world'
+                            ]
+                        ]
+                    ],
+                    'readTime' => (new \DateTime())
+                    ->setTimestamp($readTime->getSeconds())
+                    ->format(Timestamp::FORMAT)
+                ],
+                []
+            ]));
+
+        $this->query->___setProperty('connection', $this->connection->reveal());
+
+        $res = $this->query->documents([
+            'maxRetries' => 0,
+            'readTime' => $readTime
+        ]);
+        $this->assertContainsOnlyInstancesOf(DocumentSnapshot::class, $res);
+        $this->assertCount(1, $res->rows());
+
+        $current = $res->rows()[0];
+        $this->assertEquals($name, $current->name());
+        $this->assertEquals('world', $current['hello']);
+    }
+
     public function testDocumentsMetadata()
     {
         $name = self::QUERY_PARENT .'/foo';
 
-        $ts = (new \DateTime)->format(Timestamp::FORMAT);
+        $ts = (new \DateTime())->format(Timestamp::FORMAT);
         $this->connection->runQuery(Argument::any())
             ->shouldBeCalled()
             ->willReturn(new \ArrayIterator([
@@ -692,7 +732,7 @@ class QueryTest extends TestCase
                             ]
                         ]
                     ],
-                    'readTime' => (new \DateTime)->format(Timestamp::FORMAT)
+                    'readTime' => (new \DateTime())->format(Timestamp::FORMAT)
                 ],
                 [
                     'document' => [
@@ -703,7 +743,7 @@ class QueryTest extends TestCase
                             ]
                         ]
                     ],
-                    'readTime' => (new \DateTime)->format(Timestamp::FORMAT)
+                    'readTime' => (new \DateTime())->format(Timestamp::FORMAT)
                 ],
             ]));
 

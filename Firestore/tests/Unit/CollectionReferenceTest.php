@@ -26,6 +26,7 @@ use Google\Cloud\Core\Iterator\ItemIterator;
 use Google\Cloud\Firestore\DocumentReference;
 use Google\Cloud\Firestore\CollectionReference;
 use Google\Cloud\Firestore\Connection\ConnectionInterface;
+use Google\Protobuf\Timestamp as ProtobufTimestamp;
 
 /**
  * @group firestore
@@ -137,6 +138,38 @@ class CollectionReferenceTest extends TestCase
         $this->collection->___setProperty('connection', $this->connection->reveal());
 
         $res = $this->collection->listDocuments();
+        $docs = iterator_to_array($res);
+
+        $this->assertInstanceOf(ItemIterator::class, $res);
+        $this->assertInstanceOf(DocumentReference::class, $docs[0]);
+        $this->assertEquals($docName, $docs[0]->name());
+    }
+
+    public function testReadTimeListDocuments()
+    {
+        $parts = explode('/', self::NAME);
+        $id = end($parts);
+
+        $docName = self::NAME . '/foo';
+
+        $readTime = new ProtobufTimestamp();
+        $readTime->setSeconds(time() - 60);
+        $this->connection->listDocuments(Argument::allOf(
+            Argument::withEntry('parent', self::COLLECTION_PARENT),
+            Argument::withEntry('collectionId', $id),
+            Argument::withEntry('mask', []),
+            Argument::withEntry('readTime', $readTime)
+        ))->shouldBeCalled()->willReturn([
+            'documents' => [
+                [
+                    'name' => $docName
+                ]
+            ]
+        ]);
+
+        $this->collection->___setProperty('connection', $this->connection->reveal());
+
+        $res = $this->collection->listDocuments(['readTime' => $readTime]);
         $docs = iterator_to_array($res);
 
         $this->assertInstanceOf(ItemIterator::class, $res);

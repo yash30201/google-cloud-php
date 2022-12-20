@@ -27,6 +27,7 @@ use Google\Cloud\Firestore\Query;
 use Google\Cloud\Firestore\QuerySnapshot;
 use Google\Cloud\Firestore\Transaction;
 use Google\Cloud\Firestore\ValueMapper;
+use Google\Protobuf\Timestamp as ProtobufTimestamp;
 use Yoast\PHPUnitPolyfills\TestCases\TestCase;
 use Prophecy\Argument;
 
@@ -44,7 +45,7 @@ class TransactionTest extends TestCase
     private $connection;
     private $valueMapper;
     private $transaction;
-    private $reference;
+    private $ref;
 
     public function set_up()
     {
@@ -86,6 +87,29 @@ class TransactionTest extends TestCase
         $this->assertInstanceOf(DocumentSnapshot::class, $res);
         $this->assertEquals(self::DOCUMENT, $res->name());
         $this->assertEquals('world', $res['hello']);
+    }
+
+    public function testReadTimeWithSnapshot()
+    {
+        $readTime = new ProtobufTimestamp();
+        $readTime->setSeconds(time() - 60);
+        $this->connection->batchGetDocuments([
+            'database' => sprintf('projects/%s/databases/%s', self::PROJECT, self::DATABASE),
+            'documents' => [self::DOCUMENT],
+            'transaction' => self::TRANSACTION,
+            'readTime' => $readTime
+        ])->shouldBeCalled()->willReturn(new \ArrayIterator([
+            ['missing' => self::DOCUMENT]
+        ]));
+
+        $this->transaction->___setProperty('connection', $this->connection->reveal());
+
+        $snapshot = $this->transaction->snapshot(
+            $this->ref->reveal(),
+            ['readTime' => $readTime]
+        );
+        $this->assertInstanceOf(DocumentSnapshot::class, $snapshot);
+        $this->assertFalse($snapshot->exists());
     }
 
     public function testRunQuery()

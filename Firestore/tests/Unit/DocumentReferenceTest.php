@@ -26,6 +26,7 @@ use Google\Cloud\Firestore\DocumentReference;
 use Google\Cloud\Firestore\DocumentSnapshot;
 use Google\Cloud\Firestore\FieldPath;
 use Google\Cloud\Firestore\ValueMapper;
+use Google\Protobuf\Timestamp as ProtobufTimestamp;
 use Yoast\PHPUnitPolyfills\TestCases\TestCase;
 use Yoast\PHPUnitPolyfills\Polyfills\AssertEqualsSpecializations;
 use Prophecy\Argument;
@@ -39,10 +40,10 @@ class DocumentReferenceTest extends TestCase
     use AssertEqualsSpecializations;
     use TimeTrait;
 
-    const PROJECT = 'example_project';
-    const DATABASE = '(default)';
-    const COLLECTION = 'projects/example_project/databases/(default)/documents/a';
-    const NAME = 'projects/example_project/databases/(default)/documents/a/b';
+    public const PROJECT = 'example_project';
+    public const DATABASE = '(default)';
+    public const COLLECTION = 'projects/example_project/databases/(default)/documents/a';
+    public const NAME = 'projects/example_project/databases/(default)/documents/a/b';
 
     private $connection;
     private $document;
@@ -55,7 +56,11 @@ class DocumentReferenceTest extends TestCase
         $this->document = TestHelpers::stub(DocumentReference::class, [
             $this->connection->reveal(),
             $valueMapper,
-            new CollectionReference($this->connection->reveal(), $valueMapper, self::COLLECTION),
+            new CollectionReference(
+                $this->connection->reveal(),
+                $valueMapper,
+                self::COLLECTION
+            ),
             self::NAME
         ]);
     }
@@ -217,6 +222,25 @@ class DocumentReferenceTest extends TestCase
         $this->assertEquals(self::NAME, $snapshot->name());
     }
 
+    public function testReadTimeWithSnapshot()
+    {
+        $readTime = new ProtobufTimestamp();
+        $readTime->setSeconds(time() - 60);
+        $this->connection->batchGetDocuments([
+            'database' => sprintf('projects/%s/databases/%s', self::PROJECT, self::DATABASE),
+            'documents' => [self::NAME],
+            'readTime' => $readTime
+        ])->shouldBeCalled()->willReturn(new \ArrayIterator([
+            ['missing' => self::NAME]
+        ]));
+
+        $this->document->___setProperty('connection', $this->connection->reveal());
+
+        $snapshot = $this->document->snapshot(['readTime' => $readTime]);
+        $this->assertInstanceOf(DocumentSnapshot::class, $snapshot);
+        $this->assertFalse($snapshot->exists());
+    }
+
     public function testCollection()
     {
         $collection = $this->document->collection('c');
@@ -251,6 +275,41 @@ class DocumentReferenceTest extends TestCase
         $this->assertEquals(self::NAME .'/c', $collections[0]->name());
         $this->assertEquals(self::NAME .'/d', $collections[1]->name());
         $this->assertEquals(self::NAME .'/e', $collections[2]->name());
+    }
+
+    public function testReadTimeWithCollections()
+    {
+        $readTime = new ProtobufTimestamp();
+        $readTime->setSeconds(time() - 60);
+        $this->connection->listCollectionIds(Argument::allOf(
+            Argument::withEntry('parent', self::NAME),
+            Argument::cetera()
+        ))->shouldBeCalled()->will(
+            function ($args, $mock) use ($readTime) {
+                $mock->listCollectionIds([
+                    'parent' => self::NAME,
+                    'pageToken' => 'token',
+                    'readTime' => $readTime
+                ])->shouldBeCalled()->willReturn([
+                    'collectionIds' => []
+                ]);
+
+                return [
+                    'collectionIds' => ['c', 'd'],
+                    'nextPageToken' => 'token'
+                ];
+            }
+        );
+
+        $this->document->___setProperty('connection', $this->connection->reveal());
+
+        $collections = iterator_to_array($this->document->collections([
+            'readTime' => $readTime
+        ]));
+        $this->assertContainsOnlyInstancesOf(CollectionReference::class, $collections);
+        $this->assertCount(2, $collections);
+        $this->assertEquals(self::NAME .'/c', $collections[0]->name());
+        $this->assertEquals(self::NAME .'/d', $collections[1]->name());
     }
 
     public function testWriteResult()

@@ -32,6 +32,7 @@ use Google\Cloud\Firestore\FirestoreClient;
 use Google\Cloud\Firestore\FirestoreSessionHandler;
 use Google\Cloud\Firestore\Query;
 use Google\Cloud\Firestore\WriteBatch;
+use Google\Protobuf\Timestamp as ProtobufTimestamp;
 use Yoast\PHPUnitPolyfills\TestCases\TestCase;
 use Prophecy\Argument;
 use Yoast\PHPUnitPolyfills\Polyfills\ExpectException;
@@ -45,8 +46,8 @@ class FirestoreClientTest extends TestCase
     use ExpectException;
     use GrpcTestTrait;
 
-    const PROJECT = 'example_project';
-    const DATABASE = '(default)';
+    public const PROJECT = 'example_project';
+    public const DATABASE = '(default)';
 
     private $connection;
     private $client;
@@ -114,6 +115,37 @@ class FirestoreClientTest extends TestCase
         $this->assertEquals($arr[0]->id(), $collectionIds[0]);
         $this->assertEquals($arr[1]->id(), $collectionIds[1]);
         $this->assertEquals($arr[2]->id(), $collectionIds[2]);
+    }
+
+    public function testReadTimeWithCollections()
+    {
+        $collectionIds = [
+            'collection-a',
+            'collection-b',
+        ];
+
+        $readTime = new ProtobufTimestamp();
+        $readTime->setSeconds(time() - 60);
+        $this->connection->listCollectionIds(Argument::allOf(
+            Argument::withEntry('foo', 'bar'),
+            Argument::withEntry('readTime', $readTime)
+        ))->willReturn([
+            'collectionIds' => $collectionIds
+        ])->shouldBeCalledTimes(1);
+
+        $this->client->___setProperty('connection', $this->connection->reveal());
+
+        $collections = $this->client->collections([
+            'foo' => 'bar',
+            'readTime' => $readTime
+        ]);
+
+        $this->assertInstanceOf(ItemIterator::class, $collections);
+
+        $arr = iterator_to_array($collections);
+        $this->assertInstanceOf(CollectionReference::class, $arr[0]);
+        $this->assertEquals($arr[0]->id(), $collectionIds[0]);
+        $this->assertEquals($arr[1]->id(), $collectionIds[1]);
     }
 
     public function testCollectionsPaged()
@@ -210,13 +242,13 @@ class FirestoreClientTest extends TestCase
                         ]
                     ]
                 ],
-                'readTime' => new Timestamp(new \DateTimeImmutable)
+                'readTime' => new Timestamp(new \DateTimeImmutable())
             ], [
                 'missing' => $names[1],
-                'readTime' => new Timestamp(new \DateTimeImmutable)
+                'readTime' => new Timestamp(new \DateTimeImmutable())
             ], [
                 'missing' => $names[2],
-                'readTime' => new Timestamp(new \DateTimeImmutable)
+                'readTime' => new Timestamp(new \DateTimeImmutable())
             ]
         ];
 
@@ -229,6 +261,48 @@ class FirestoreClientTest extends TestCase
         $res = $this->client->documents($input);
 
         $this->assertEquals('world', $res[0]['hello']);
+    }
+
+    /**
+     * @dataProvider documents
+     */
+    public function testReadTimeWithDocuments(array $input, array $names)
+    {
+        $res = [
+            [
+                'missing' => $names[0],
+                'readTime' => new Timestamp(new \DateTimeImmutable())
+            ], [
+                'missing' => $names[1],
+                'readTime' => new Timestamp(new \DateTimeImmutable())
+            ], [
+                'missing' => $names[2],
+                'readTime' => new Timestamp(new \DateTimeImmutable())
+            ]
+        ];
+
+        $readTime = new ProtobufTimestamp();
+        $readTime->setSeconds(time() - 60);
+        $this->connection->batchGetDocuments(
+            Argument::allOf(
+                Argument::withEntry('documents', $names),
+                Argument::withEntry('readTime', $readTime)
+            )
+        )->shouldBeCalled()->willReturn($res);
+
+        $this->client->___setProperty('connection', $this->connection->reveal());
+
+        $documents = $this->client->documents(
+            $input,
+            ['readTime' => $readTime]
+        );
+        $documentExists = false;
+        foreach ($documents as $document) {
+            if ($document->exists()) {
+                $documentExists = true;
+            }
+        }
+        $this->assertFalse($documentExists);
     }
 
     public function testDocumentsInvalidInputType()
@@ -297,13 +371,13 @@ class FirestoreClientTest extends TestCase
         $res = [
             [
                 'missing' => $names[2],
-                'readTime' => new Timestamp(new \DateTimeImmutable)
+                'readTime' => new Timestamp(new \DateTimeImmutable())
             ], [
                 'missing' => $names[1],
-                'readTime' => new Timestamp(new \DateTimeImmutable)
+                'readTime' => new Timestamp(new \DateTimeImmutable())
             ], [
                 'missing' => $names[0],
-                'readTime' => new Timestamp(new \DateTimeImmutable)
+                'readTime' => new Timestamp(new \DateTimeImmutable())
             ]
         ];
 
@@ -364,7 +438,7 @@ class FirestoreClientTest extends TestCase
     public function testRunTransaction()
     {
         $transactionId = 'foobar';
-        $timestamp = new Timestamp(new \DateTimeImmutable);
+        $timestamp = new Timestamp(new \DateTimeImmutable());
 
         $this->connection->beginTransaction([
             'database' => 'projects/'. self::PROJECT .'/databases/'. self::DATABASE
@@ -386,7 +460,7 @@ class FirestoreClientTest extends TestCase
     {
         $transactionId = 'foobar';
         $transactionId2 = 'barfoo';
-        $timestamp = new Timestamp(new \DateTimeImmutable);
+        $timestamp = new Timestamp(new \DateTimeImmutable());
 
         $this->connection->beginTransaction([
             'database' => 'projects/'. self::PROJECT .'/databases/'. self::DATABASE
@@ -437,7 +511,7 @@ class FirestoreClientTest extends TestCase
         $this->expectExceptionMessage('foo');
 
         $transactionId = 'foobar';
-        $timestamp = new Timestamp(new \DateTimeImmutable);
+        $timestamp = new Timestamp(new \DateTimeImmutable());
 
         $this->connection->beginTransaction([
             'database' => 'projects/'. self::PROJECT .'/databases/'. self::DATABASE
@@ -464,7 +538,7 @@ class FirestoreClientTest extends TestCase
         $this->expectException('Google\Cloud\Core\Exception\AbortedException');
 
         $transactionId = 'foobar';
-        $timestamp = new Timestamp(new \DateTimeImmutable);
+        $timestamp = new Timestamp(new \DateTimeImmutable());
 
         $this->connection->beginTransaction(Argument::any())->shouldBeCalledTimes(6)->willReturn([
             'transaction' => $transactionId
@@ -490,7 +564,7 @@ class FirestoreClientTest extends TestCase
         $this->expectException('Google\Cloud\Core\Exception\AbortedException');
 
         $transactionId = 'foobar';
-        $timestamp = new Timestamp(new \DateTimeImmutable);
+        $timestamp = new Timestamp(new \DateTimeImmutable());
 
         $this->connection->beginTransaction(Argument::any())->shouldBeCalledTimes(3)->willReturn([
             'transaction' => $transactionId
